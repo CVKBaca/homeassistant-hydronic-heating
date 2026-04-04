@@ -1,0 +1,154 @@
+blueprint:
+  name: Hydronic Boiler Controller
+  description: >
+    Controls a hydronic boiler based on room heating demand from TRV thermostats.
+
+    Turn ON: Fires when any thermostat reports heating demand. Includes short-cycling
+    protection — waits until the boiler has been in its current state for a minimum
+    time before switching on. This is especially important for condensing boilers,
+    which need a minimum run time to reach operating temperature and condensing mode.
+
+    Turn OFF: Fires after all thermostats have been off for turn_off_delay minutes.
+    The delay is built into the trigger — no unnecessary pumping after valves close.
+    If any thermostat turns back on during the delay, the off-timer is cancelled
+    and the boiler stays on (mode: restart handles this automatically).
+
+    IMPORTANT: The hydraulic circuit must have at least one permanently open radiator.
+    If all radiators close simultaneously, the boiler/pump pushes water into a closed
+    circuit — this can damage or destroy your equipment.
+  domain: automation
+  input:
+    boiler_switch:
+      name: Boiler switch
+      description: "Switch entity controlling the boiler (e.g. switch.your_boiler)"
+      selector:
+        entity:
+          domain: switch
+    boiler_sensor:
+      name: Boiler binary sensor
+      description: >
+        Binary sensor reflecting the actual boiler state — used for short-cycling
+        protection. If your boiler switch IS the binary sensor, use the same entity
+        for both. (e.g. binary_sensor.your_boiler)
+      selector:
+        entity:
+          domain: binary_sensor
+    heating_status_sensor:
+      name: Heating season sensor
+      description: >
+        Sensor returning 'On' when heating is active (e.g. sensor.heating_status).
+        The boiler will not turn on outside the heating season.
+      default: sensor.heating_status
+      selector:
+        entity:
+          domain: sensor
+    thermostat_sensors:
+      name: Thermostat sensors
+      description: >
+        List of binary sensors — one per room/zone. Each sensor should be 'on' when
+        the room needs heat (e.g. when valve position > 18%).
+        See docs/prerequisites.md for how to create these sensors.
+      selector:
+        entity:
+          domain: binary_sensor
+          multiple: true
+    min_cycle_protection:
+      name: Short-cycling protection (minutes)
+      description: >
+        Minimum time (minutes) since the last boiler state change before allowing
+        turn-on. Protects condensing boilers from frequent short cycles.
+        Recommended: 10 minutes for most condensing boilers.
+      default: 10
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 1
+          unit_of_measurement: min
+          mode: box
+    turn_off_delay:
+      name: Turn-off delay (minutes)
+      description: >
+        Minutes all thermostats must remain off before the boiler shuts down.
+        Allows residual heat to distribute through the system before shutdown.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          unit_of_measurement: min
+          mode: box
+
+variables:
+  boiler_switch: !input boiler_switch
+  boiler_sensor: !input boiler_sensor
+  heating_status_sensor: !input heating_status_sensor
+  thermostat_sensors: !input thermostat_sensors
+  min_cycle_protection: !input min_cycle_protection
+
+triggers:
+  # Turn ON: any thermostat turns on → evaluate immediately
+  - entity_id: !input thermostat_sensors
+    to: 'on'
+    trigger: state
+  # Turn OFF: all thermostats have been off for turn_off_delay minutes
+  # The 'for' delay is in the trigger — if any thermostat turns back on during
+  # the delay, the timer resets automatically. mode: restart handles the rest.
+  - entity_id: !input thermostat_sensors
+    to: 'off'
+    for:
+      minutes: !input turn_off_delay
+    trigger: state
+  # Safety net: re-evaluate every 15 minutes in case a trigger was missed
+  - minutes: /15
+    trigger: time_pattern
+
+actions:
+  - choose:
+      # Branch 1: Turn ON — at least one thermostat demands heat and boiler is off
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ thermostat_sensors | map('states') | select('equalto', 'on') | list | count > 0
+                 and states(boiler_switch) == 'off'
+                 and states(heating_status_sensor) == 'On' }}
+        sequence:
+          - repeat:
+              sequence:
+                - wait_template: >
+                    {{ as_timestamp(now()) - as_timestamp(states[boiler_sensor].last_changed)
+                       > min_cycle_protection * 60 }}
+                  continue_on_timeout: false
+                  timeout: '{{ min_cycle_protection * 60 + 60 }}'
+                - action: homeassistant.turn_on
+                  target:
+                    entity_id: !input boiler_switch
+              until:
+                - condition: template
+                  value_template: "{{ states(boiler_switch) == 'on' }}"
+          - delay:
+              seconds: 10
+
+      # Branch 2: Turn OFF — all thermostats are off and boiler is on
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ thermostat_sensors | map('states') | reject('equalto', 'off') | list | count == 0
+                 and states(boiler_switch) == 'on' }}
+        sequence:
+          - repeat:
+              sequence:
+                - action: homeassistant.turn_off
+                  target:
+                    entity_id: !input boiler_switch
+                - delay:
+                    seconds: 10
+              until:
+                - condition: template
+                  value_template: "{{ states(boiler_switch) == 'off' }}"
+
+# restart: if a new trigger arrives while Turn ON is waiting (short-cycling protection),
+# the action restarts and re-evaluates — handles the case where a thermostat turns off
+# during the wait, preventing the boiler from turning on when demand is gone.
+mode: restart

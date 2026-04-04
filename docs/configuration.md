@@ -69,12 +69,14 @@ use_blueprint:
 
 ---
 
-## Boiler Turn ON — Example
+## Boiler Controller — Example
+
+A single automation handles both turn-on and turn-off:
 
 ```yaml
-alias: Boiler - Turn ON
+alias: Boiler Controller
 use_blueprint:
-  path: hydronic-heating/hydronic_boiler_turn_on.yaml
+  path: hydronic-heating/hydronic_boiler_controller.yaml
   input:
     boiler_switch: switch.your_boiler_switch
     boiler_sensor: binary_sensor.your_boiler_sensor
@@ -84,28 +86,9 @@ use_blueprint:
       - binary_sensor.thermostat_bedroom
       - binary_sensor.thermostat_bathroom
       - binary_sensor.thermostat_corridor
-    # Optional:
+    # Optional — defaults shown:
     # heating_status_sensor: sensor.heating_status
     # min_cycle_protection: 10
-```
-
----
-
-## Boiler Turn OFF — Example
-
-```yaml
-alias: Boiler - Turn OFF
-use_blueprint:
-  path: hydronic-heating/hydronic_boiler_turn_off.yaml
-  input:
-    boiler_switch: switch.your_boiler_switch
-    thermostat_sensors:
-      - binary_sensor.thermostat_living_room
-      - binary_sensor.thermostat_kitchen
-      - binary_sensor.thermostat_bedroom
-      - binary_sensor.thermostat_bathroom
-      - binary_sensor.thermostat_corridor
-    # Optional:
     # turn_off_delay: 10
 ```
 
@@ -113,6 +96,6 @@ use_blueprint:
 
 ## Notes
 
-- The `thermostat_sensors` list in Boiler Turn ON and Turn OFF must be identical.
+- The `thermostat_sensors` list must be consistent — the same rooms in both Set Valve Position automations and the Boiler Controller.
 - The `boiler_sensor` (binary sensor reflecting actual boiler state) is separate from `boiler_switch` (the switch you control). If your boiler switch IS the sensor, you can use the same entity for both.
 - For rooms with multiple TRVs, create a combined `binary_sensor.thermostat_*` that ORs the individual sensors — see [prerequisites.md](prerequisites.md).

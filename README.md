@@ -32,15 +32,14 @@ If all radiators close simultaneously, the boiler and circulation pump will push
                                                                   │
                                     ┌─────────────────────────────┘
                                     │
-                         [Boiler Turn ON blueprint] ──► [boiler switch]
-                         [Boiler Turn OFF blueprint] ──►
+                         [Boiler Controller blueprint] ──► [boiler switch]
 ```
 
 ---
 
 ## Prerequisites
 
-Before installing the blueprints, you need to create the following entities manually. See [docs/prerequisites.md](docs/prerequisites.md) for detailed instructions.
+Before installing the blueprints, you need to create the following entities manually. See [docs/prerequisites.md](docs/prerequisites.md) for detailed instructions and real-world examples.
 
 | Entity | Type | Description |
 |--------|------|-------------|
@@ -120,11 +119,20 @@ Sets the TRV target temperature via MQTT when the corresponding `input_number` c
 
 ---
 
-### 4. Hydronic Boiler — Turn ON
+### 4. Hydronic Boiler Controller
 
-**File:** `blueprints/hydronic_boiler_turn_on.yaml`
+**File:** `blueprints/hydronic_boiler_controller.yaml`
 
-Turns on the boiler when at least one thermostat sensor reports heating demand. Includes short-cycling protection: waits until the boiler has been in its current state for a minimum time before switching on.
+Controls the boiler based on aggregate heating demand from all rooms. Handles both turn-on and turn-off logic in a single automation instance.
+
+**Turn ON logic:**
+- Triggers immediately when any thermostat sensor turns `on`
+- Includes short-cycling protection: waits until the boiler has been stable for `min_cycle_protection` minutes before switching on
+- Does not turn on outside the heating season
+
+**Turn OFF logic:**
+- Triggers after all thermostat sensors have been `off` for `turn_off_delay` minutes (delay is built into the trigger — no unnecessary pumping)
+- If any thermostat turns on during the delay, the off-timer resets automatically (`mode: restart`)
 
 **Parameters:**
 
@@ -135,21 +143,6 @@ Turns on the boiler when at least one thermostat sensor reports heating demand. 
 | `thermostat_sensors` | ✅ | — | List of `binary_sensor.thermostat_*` entities |
 | `heating_status_sensor` | ⬜ | `sensor.heating_status` | Heating season sensor |
 | `min_cycle_protection` | ⬜ | `10` | Minutes since last boiler state change before allowing turn-on |
-
----
-
-### 5. Hydronic Boiler — Turn OFF
-
-**File:** `blueprints/hydronic_boiler_turn_off.yaml`
-
-Turns off the boiler after all thermostat sensors have been off for a configurable delay. The delay is built into the trigger — no unnecessary pumping after all valves close.
-
-**Parameters:**
-
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `boiler_switch` | ✅ | — | Switch entity controlling the boiler |
-| `thermostat_sensors` | ✅ | — | List of `binary_sensor.thermostat_*` entities |
 | `turn_off_delay` | ⬜ | `10` | Minutes all thermostats must be off before turning off the boiler |
 
 ---
@@ -161,6 +154,10 @@ See [docs/installation.md](docs/installation.md).
 ## Configuration Examples
 
 See [docs/configuration.md](docs/configuration.md).
+
+## Roadmap
+
+See [docs/roadmap.md](docs/roadmap.md) for planned improvements, including a consolidated single TRV controller blueprint (v2.0).
 
 ## License
 

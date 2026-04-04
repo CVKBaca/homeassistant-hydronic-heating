@@ -31,15 +31,14 @@ Use the raw GitHub URL for each blueprint file.
 
 ## Step 3 — Create Automation Instances
 
-Create one automation instance per blueprint per TRV. You need:
+Create one automation instance per blueprint per TRV, plus one Boiler Controller instance total:
 
 | Blueprint | Instances |
 |-----------|-----------|
 | Set Valve Position | 1× per TRV |
 | Sync External Temperature | 1× per TRV |
 | Set Target Temperature | 1× per TRV |
-| Boiler Turn ON | 1× total |
-| Boiler Turn OFF | 1× total |
+| Boiler Controller | 1× total |
 
 **Settings → Automations & Scenes → Create Automation → Use a Blueprint**
 
