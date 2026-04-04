@@ -4,67 +4,166 @@ This page shows example automation configurations for a typical multi-room setup
 
 ---
 
-## Set Valve Position — Example
+## Shelly TRV Controller — Example (with window sensor)
+
+A single automation instance replaces the three separate v1.x blueprints.
 
 ```yaml
-alias: Shelly TRV Bedroom 1 - Set Valve Position
+alias: Shelly TRV Bedroom 1 - Controller
 use_blueprint:
-  path: hydronic-heating/shelly_trv_set_valve_position.yaml
+  path: hydronic-heating/shelly_trv_controller.yaml
   input:
     trv_entity: climate.shelly_trv_bedroom_1
-    valve_position_sensor: sensor.valve_position_bedroom_1
-    current_valve_entity: number.shelly_trv_bedroom_1_valve_position
     aqara_sensor: sensor.aqara_t1_sensor_bedroom_temperature
-    mqtt_topic: shellies/shellytrv_bedroom_1/thermostat/0/command/valve_pos
+    trv_temperature_sensor: sensor.shelly_trv_bedroom_1_temperature
+    current_valve_entity: number.shelly_trv_bedroom_1_valve_position
+    target_temp_input: input_number.heating_temperature_bedroom_current
+    mqtt_topic_base: shellies/shellytrv_bedroom_1/thermostat/0/command
+    window_sensor: binary_sensor.bedroom_window_contact
+    frost_temp: 8
     # Optional — defaults shown:
     # heating_status_sensor: sensor.heating_status
     # boiler_sensor: binary_sensor.your_boiler_sensor
+    # hysteresis_threshold: 5
+    # window_close_delay: 5
 ```
 
 ---
 
-## Sync External Temperature — Example
+## Shelly TRV Controller — Example (no window sensor)
+
+For rooms without a window/door sensor, omit `window_sensor` — it defaults to `sun.sun` which is never `on`.
 
 ```yaml
-alias: Shelly TRV Bedroom 1 - Sync Temperature
+alias: Shelly TRV Corridor - Controller
 use_blueprint:
-  path: hydronic-heating/shelly_trv_sync_temperature.yaml
-  input:
-    aqara_sensor: sensor.aqara_t1_sensor_bedroom_temperature
-    trv_temperature_sensor: sensor.shelly_trv_bedroom_1_temperature
-    valve_position_sensor: sensor.valve_position_bedroom_1
-    mqtt_topic: shellies/shellytrv_bedroom_1/thermostat/0/command/ext_t
-    # Optional:
-    # heating_status_sensor: sensor.heating_status
-```
-
----
-
-## Set Target Temperature — Example (with window sensor)
-
-```yaml
-alias: Shelly TRV Living Room - Set Target Temperature
-use_blueprint:
-  path: hydronic-heating/shelly_trv_set_target_temperature.yaml
-  input:
-    trv_entity: climate.shelly_trv_living_room_2
-    target_temp_input: input_number.heating_temperature_living_room_current
-    mqtt_topic: shellies/shellytrv_livingroom_2/thermostat/0/command/target_t
-    window_sensor: binary_sensor.window_sensor_living_room_contact
-    frost_temp: 8
-```
-
-## Set Target Temperature — Example (no window sensor)
-
-```yaml
-alias: Shelly TRV Corridor - Set Target Temperature
-use_blueprint:
-  path: hydronic-heating/shelly_trv_set_target_temperature.yaml
+  path: hydronic-heating/shelly_trv_controller.yaml
   input:
     trv_entity: climate.shelly_trv_corridor
+    aqara_sensor: sensor.aqara_t1_sensor_podesta_temperature
+    trv_temperature_sensor: sensor.shelly_trv_corridor_temperature
+    current_valve_entity: number.shelly_trv_corridor_valve_position
     target_temp_input: input_number.heating_temperature_corridor_current
-    mqtt_topic: shellies/shellytrv_corridor/thermostat/0/command/target_t
-    # window_sensor omitted — defaults to sun.sun (never 'on')
+    mqtt_topic_base: shellies/shellytrv_corridor/thermostat/0/command
+```
+
+---
+
+## Shelly TRV Controller — Real-world example (11 TRVs)
+
+The following shows the complete automation configuration from a real 11-TRV installation.
+Note that bedroom_1 and bedroom_2 share one Aqara temperature sensor, as do living_room_2 and living_room_3.
+
+```yaml
+# Bathroom
+- alias: Shelly TRV Bathroom - Controller
+  use_blueprint:
+    path: local/shelly_trv_controller.yaml
+    input:
+      trv_entity: climate.shelly_trv_bathroom
+      aqara_sensor: sensor.aqara_t1_sensor_bathroom_temperature
+      trv_temperature_sensor: sensor.shelly_trv_bathroom_temperature
+      current_valve_entity: number.shelly_trv_bathroom_valve_position
+      target_temp_input: input_number.heating_temperature_bathroom_current
+      mqtt_topic_base: shellies/shellytrv_bathroom/thermostat/0/command
+
+# Bedroom 1 (shares Aqara sensor with Bedroom 2)
+- alias: Shelly TRV Bedroom 1 - Controller
+  use_blueprint:
+    path: local/shelly_trv_controller.yaml
+    input:
+      trv_entity: climate.shelly_trv_bedroom_1
+      aqara_sensor: sensor.aqara_t1_sensor_bedroom_temperature
+      trv_temperature_sensor: sensor.shelly_trv_bedroom_1_temperature
+      current_valve_entity: number.shelly_trv_bedroom_1_valve_position
+      target_temp_input: input_number.heating_temperature_bedroom_current
+      mqtt_topic_base: shellies/shellytrv_bedroom_1/thermostat/0/command
+      window_sensor: binary_sensor.balcony_door
+
+# Bedroom 2 (shares Aqara sensor with Bedroom 1)
+- alias: Shelly TRV Bedroom 2 - Controller
+  use_blueprint:
+    path: local/shelly_trv_controller.yaml
+    input:
+      trv_entity: climate.shelly_trv_bedroom_2
+      aqara_sensor: sensor.aqara_t1_sensor_bedroom_temperature
+      trv_temperature_sensor: sensor.shelly_trv_bedroom_2_temperature
+      current_valve_entity: number.shelly_trv_bedroom_2_valve_position
+      target_temp_input: input_number.heating_temperature_bedroom_current
+      mqtt_topic_base: shellies/shellytrv_bedroom_2/thermostat/0/command
+      window_sensor: binary_sensor.balcony_door
+
+# Living Room 2 (shares Aqara sensor with Living Room 3)
+- alias: Shelly TRV Living Room 2 - Controller
+  use_blueprint:
+    path: local/shelly_trv_controller.yaml
+    input:
+      trv_entity: climate.shelly_trv_living_room_2
+      aqara_sensor: sensor.aqara_t1_sensor_living_room_temperature
+      trv_temperature_sensor: sensor.shelly_trv_living_room_2_temperature
+      current_valve_entity: number.shelly_trv_living_room_2_valve_position
+      target_temp_input: input_number.heating_temperature_living_room_current
+      mqtt_topic_base: shellies/shellytrv_livingroom_2/thermostat/0/command
+
+# Living Room 3 (shares Aqara sensor with Living Room 2)
+- alias: Shelly TRV Living Room 3 - Controller
+  use_blueprint:
+    path: local/shelly_trv_controller.yaml
+    input:
+      trv_entity: climate.shelly_trv_living_room_3
+      aqara_sensor: sensor.aqara_t1_sensor_living_room_temperature
+      trv_temperature_sensor: sensor.shelly_trv_living_room_3_temperature
+          current_valve_entity: number.shelly_trv_living_room_3_valve_position
+      target_temp_input: input_number.heating_temperature_living_room_current
+      mqtt_topic_base: shellies/shellytrv_livingroom_3/thermostat/0/command
+
+# Kitchen
+- alias: Shelly TRV Kitchen - Controller
+  use_blueprint:
+    path: local/shelly_trv_controller.yaml
+    input:
+      trv_entity: climate.shelly_trv_kitchen
+      aqara_sensor: sensor.aqara_t1_sensor_kitchen_temperature
+      trv_temperature_sensor: sensor.shelly_trv_kitchen_temperature
+      current_valve_entity: number.shelly_trv_kitchen_valve_position
+      target_temp_input: input_number.heating_temperature_kitchen_current
+      mqtt_topic_base: shellies/shellytrv_kitchen/thermostat/0/command
+
+# Corridor
+- alias: Shelly TRV Corridor - Controller
+  use_blueprint:
+    path: local/shelly_trv_controller.yaml
+    input:
+      trv_entity: climate.shelly_trv_corridor
+      aqara_sensor: sensor.aqara_t1_sensor_podesta_temperature
+      trv_temperature_sensor: sensor.shelly_trv_corridor_temperature
+      current_valve_entity: number.shelly_trv_corridor_valve_position
+      target_temp_input: input_number.heating_temperature_corridor_current
+      mqtt_topic_base: shellies/shellytrv_corridor/thermostat/0/command
+
+# Hall
+- alias: Shelly TRV Hall - Controller
+  use_blueprint:
+    path: local/shelly_trv_controller.yaml
+    input:
+      trv_entity: climate.shelly_trv_hall
+      aqara_sensor: sensor.aqara_t1_sensor_hall_temperature
+      trv_temperature_sensor: sensor.shelly_trv_hall_temperature
+      current_valve_entity: number.shelly_trv_hall_valve_position
+      target_temp_input: input_number.heating_temperature_hall_current
+      mqtt_topic_base: shellies/shellytrv_hall/thermostat/0/command
+
+# Toilet
+- alias: Shelly TRV Toilet - Controller
+  use_blueprint:
+    path: local/shelly_trv_controller.yaml
+    input:
+      trv_entity: climate.shelly_trv_toilet
+      aqara_sensor: sensor.aqara_t1_sensor_toilet_temperature
+      trv_temperature_sensor: sensor.shelly_trv_toilet_temperature
+      current_valve_entity: number.shelly_trv_toilet_valve_position
+      target_temp_input: input_number.heating_temperature_toilet_current
+      mqtt_topic_base: shellies/shellytrv_toilet/thermostat/0/command
 ```
 
 ---
@@ -96,6 +195,7 @@ use_blueprint:
 
 ## Notes
 
-- The `thermostat_sensors` list must be consistent — the same rooms in both Set Valve Position automations and the Boiler Controller.
+- The `thermostat_sensors` list must cover the same rooms as the TRV controller instances. If a room is omitted from `thermostat_sensors`, the boiler will never turn on for that room.
 - The `boiler_sensor` (binary sensor reflecting actual boiler state) is separate from `boiler_switch` (the switch you control). If your boiler switch IS the sensor, you can use the same entity for both.
+- For rooms with multiple TRVs sharing one Aqara sensor, both TRV controller instances use the same `aqara_sensor` entity. This is fine — the blueprint handles it correctly.
 - For rooms with multiple TRVs, create a combined `binary_sensor.thermostat_*` that ORs the individual sensors — see [prerequisites.md](prerequisites.md).

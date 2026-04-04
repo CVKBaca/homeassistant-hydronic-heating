@@ -4,99 +4,9 @@ Before using the blueprints, you need to create several supporting entities in H
 
 ---
 
-## 1. `sensor.valve_position_*` — Desired Valve Position
+## 1. `binary_sensor.thermostat_*` — Room Thermostat Sensor
 
-**Type:** UI Template Sensor (Home Assistant Helper)
-**One per TRV**
-
-This sensor computes the desired valve opening position (0–100%) from the temperature delta between the climate target temperature and the actual room temperature measured by an external sensor.
-
-**How to create:** Settings → Helpers → Add Helper → Template → Sensor
-
-**Template** (replace entity IDs to match your setup):
-
-```jinja2
-{% set delta = state_attr('climate.shelly_trv_bathroom', 'temperature') | float(0)
-               - states('sensor.aqara_t1_sensor_bathroom_temperature') | float(25) %}
-{% if delta <= -0.1 %}    0
-{% elif delta <= -0.05 %} 13
-{% elif delta <= 0 %}     18
-{% elif delta <= 0.05 %}  25
-{% elif delta <= 0.1 %}   33
-{% elif delta <= 0.15 %}  40
-{% elif delta <= 0.2 %}   48
-{% elif delta <= 0.25 %}  55
-{% elif delta <= 0.3 %}   63
-{% elif delta <= 0.35 %}  70
-{% elif delta <= 0.4 %}   78
-{% elif delta <= 0.45 %}  85
-{% elif delta <= 0.5 %}   93
-{% else %}                100
-{% endif %}
-```
-
-**Lookup table explained:**
-
-| Delta (target − actual) | Valve position |
-|-------------------------|----------------|
-| ≤ −0.1°C (room too warm) | 0% |
-| = 0°C (exactly at setpoint) | 18% |
-| +0.2°C below setpoint | 48% |
-| +0.5°C below setpoint | 93% |
-| > +0.5°C below setpoint | 100% |
-
-The 18% minimum when at setpoint keeps the TRV slightly open to maintain flow and avoid hunting.
-
-> **Tip:** Adjust the lookup table to match your radiator sizing and room heat loss characteristics.
-
-### Real-world example — 11 TRVs in one installation
-
-The following shows the complete set of `sensor.valve_position_*` entities from a real installation with 11 Shelly TRVs and Aqara T1 temperature sensors:
-
-| Entity | TRV climate entity | Aqara temperature sensor |
-|--------|--------------------|--------------------------|
-| `sensor.valve_position_bathroom` | `climate.shelly_trv_bathroom` | `sensor.aqara_t1_sensor_bathroom_temperature` |
-| `sensor.valve_position_bedroom_1` | `climate.shelly_trv_bedroom_1` | `sensor.aqara_t1_sensor_bedroom_temperature` |
-| `sensor.valve_position_bedroom_2` | `climate.shelly_trv_bedroom_2` | `sensor.aqara_t1_sensor_bedroom_temperature` |
-| `sensor.valve_position_living_room_2` | `climate.shelly_trv_living_room_2` | `sensor.aqara_t1_sensor_living_room_temperature` |
-| `sensor.valve_position_living_room_3` | `climate.shelly_trv_living_room_3` | `sensor.aqara_t1_sensor_living_room_temperature` |
-| `sensor.valve_position_kitchen` | `climate.shelly_trv_kitchen` | `sensor.aqara_t1_sensor_kitchen_temperature` |
-| `sensor.valve_position_corridor` | `climate.shelly_trv_corridor` | `sensor.aqara_t1_sensor_podesta_temperature` |
-| `sensor.valve_position_hall` | `climate.shelly_trv_hall` | `sensor.aqara_t1_sensor_hall_temperature` |
-| `sensor.valve_position_matej` | `climate.shelly_trv_matej` | `sensor.aqara_t1_sensor_matej_temperature` |
-| `sensor.valve_position_richard` | `climate.shelly_trv_richard` | `sensor.aqara_t1_sensor_richard_temperature` |
-| `sensor.valve_position_toilet` | `climate.shelly_trv_toilet` | `sensor.aqara_t1_sensor_toilet_temperature` |
-
-Note: bedroom_1 and bedroom_2 share the same Aqara sensor — both TRVs use the same room temperature.
-Living room TRVs 2 and 3 likewise share one sensor for the same room.
-
-The template is identical for all — only the entity IDs differ:
-
-```jinja2
-{% set delta = state_attr('climate.shelly_trv_bedroom_1', 'temperature') | float(0)
-               - states('sensor.aqara_t1_sensor_bedroom_temperature') | float(25) %}
-{% if delta <= -0.1 %}    0
-{% elif delta <= -0.05 %} 13
-{% elif delta <= 0 %}     18
-{% elif delta <= 0.05 %}  25
-{% elif delta <= 0.1 %}   33
-{% elif delta <= 0.15 %}  40
-{% elif delta <= 0.2 %}   48
-{% elif delta <= 0.25 %}  55
-{% elif delta <= 0.3 %}   63
-{% elif delta <= 0.35 %}  70
-{% elif delta <= 0.4 %}   78
-{% elif delta <= 0.45 %}  85
-{% elif delta <= 0.5 %}   93
-{% else %}                100
-{% endif %}
-```
-
----
-
-## 2. `binary_sensor.thermostat_*` — Room Thermostat Sensor
-
-**Type:** YAML Template Sensor (`config/templates/`)
+**Type:** YAML Template Sensor (`config/templates/`)  
 **One per room (or one combining multiple TRVs in the same room)**
 
 This sensor is `on` when a room is actively heating (valve position > 18%). It is used by the Boiler Controller blueprint to determine heating demand.
@@ -130,16 +40,92 @@ This sensor is `on` when a room is actively heating (valve position > 18%). It i
         {{ states('number.shelly_trv_bedroom_2_valve_position') | int(0) > 18 }}
 ```
 
-> **Why 18%?** The valve position sensor returns 18% when delta = 0 (room is exactly at setpoint). Values above 18% indicate the room is below setpoint and actively heating.
+> **Why 18%?** The `shelly_trv_controller` blueprint returns 18% when the room is exactly at setpoint (delta = 0°C). Values above 18% indicate the room is below setpoint and actively calling for heat.
+
+### Real-world example — 11 TRVs in one installation
+
+```yaml
+- binary_sensor:
+    - name: "Thermostat - Bathroom"
+      unique_id: "thermostat_bathroom"
+      state: >-
+        {{ states('number.shelly_trv_bathroom_valve_position') | int(0) > 18 }}
+
+    - name: "Thermostat - Bedroom 1"
+      unique_id: "thermostat_bedroom_1"
+      state: >-
+        {{ states('number.shelly_trv_bedroom_1_valve_position') | int(0) > 18 }}
+
+    - name: "Thermostat - Bedroom 2"
+      unique_id: "thermostat_bedroom_2"
+      state: >-
+        {{ states('number.shelly_trv_bedroom_2_valve_position') | int(0) > 18 }}
+
+    # Bedroom combines Bedroom 1 + Bedroom 2
+    - name: "Thermostat - Bedroom"
+      unique_id: "thermostat_bedroom"
+      state: >-
+        {{ states('binary_sensor.thermostat_bedroom_1') == 'on'
+           or states('binary_sensor.thermostat_bedroom_2') == 'on' }}
+
+    - name: "Thermostat - Living Room 2"
+      unique_id: "thermostat_living_room_2"
+      state: >-
+        {{ states('number.shelly_trv_living_room_2_valve_position') | int(0) > 18 }}
+
+    - name: "Thermostat - Living Room 3"
+      unique_id: "thermostat_living_room_3"
+      state: >-
+        {{ states('number.shelly_trv_living_room_3_valve_position') | int(0) > 18 }}
+
+    # Living Room combines LR2 + LR3
+    - name: "Thermostat - Living Room"
+      unique_id: "thermostat_living_room"
+      state: >-
+        {{ states('binary_sensor.thermostat_living_room_2') == 'on'
+           or states('binary_sensor.thermostat_living_room_3') == 'on' }}
+
+    - name: "Thermostat - Kitchen"
+      unique_id: "thermostat_kitchen"
+      state: >-
+        {{ states('number.shelly_trv_kitchen_valve_position') | int(0) > 18 }}
+
+    - name: "Thermostat - Corridor"
+      unique_id: "thermostat_corridor"
+      state: >-
+        {{ states('number.shelly_trv_corridor_valve_position') | int(0) > 18 }}
+
+    - name: "Thermostat - Hall"
+      unique_id: "thermostat_hall"
+      state: >-
+        {{ states('number.shelly_trv_hall_valve_position') | int(0) > 18 }}
+
+    - name: "Thermostat - Matej"
+      unique_id: "thermostat_matej"
+      state: >-
+        {{ states('number.shelly_trv_matej_valve_position') | int(0) > 18 }}
+
+    - name: "Thermostat - Richard"
+      unique_id: "thermostat_richard"
+      state: >-
+        {{ states('number.shelly_trv_richard_valve_position') | int(0) > 18 }}
+
+    - name: "Thermostat - Toilet"
+      unique_id: "thermostat_toilet"
+      state: >-
+        {{ states('number.shelly_trv_toilet_valve_position') | int(0) > 18 }}
+```
+
+After adding these sensors, restart Home Assistant.
 
 ---
 
-## 3. `sensor.heating_status` — Heating Season Sensor
+## 2. `sensor.heating_status` — Heating Season Sensor
 
-**Type:** UI Template Sensor (Home Assistant Helper)
+**Type:** UI Template Sensor (Home Assistant Helper)  
 **One per installation**
 
-This sensor returns `On` or `Off` to indicate whether the heating system should be active at all. It is used by the Set Valve Position, Sync Temperature and Boiler Controller blueprints to suppress activity outside the heating season.
+This sensor returns `On` or `Off` to indicate whether the heating system should be active at all. It is used by the TRV Controller and Boiler Controller blueprints to suppress activity outside the heating season.
 
 **How to create:** Settings → Helpers → Add Helper → Template → Sensor
 
@@ -166,12 +152,12 @@ This sensor returns `On` or `Off` to indicate whether the heating system should 
 
 ---
 
-## 4. `input_number.*_current` — Target Temperature per Room
+## 3. `input_number.*_current` — Target Temperature per Room
 
-**Type:** Input Number Helper
+**Type:** Input Number Helper  
 **One per room**
 
-Stores the desired target temperature for each room. Can be controlled from the UI, automations, or schedules.
+Stores the desired target temperature for each room. The TRV Controller blueprint reads this value to determine the target temperature and compute the valve position.
 
 **How to create:** Settings → Helpers → Add Helper → Number
 
@@ -179,14 +165,25 @@ Stores the desired target temperature for each room. Can be controlled from the 
 - **Maximum:** 30°C
 - **Step:** 0.5°C
 
+**Naming convention:** `input_number.heating_temperature_<room>_current`
+
 **Example entity IDs:**
-- `input_number.heating_temperature_bedroom_current`
-- `input_number.heating_temperature_living_room_current`
-- `input_number.heating_temperature_bathroom_current`
+
+| Room | Entity ID |
+|------|-----------|
+| Bathroom | `input_number.heating_temperature_bathroom_current` |
+| Bedroom | `input_number.heating_temperature_bedroom_current` |
+| Living Room | `input_number.heating_temperature_living_room_current` |
+| Kitchen | `input_number.heating_temperature_kitchen_current` |
+| Corridor | `input_number.heating_temperature_corridor_current` |
+| Hall | `input_number.heating_temperature_hall_current` |
+| Toilet | `input_number.heating_temperature_toilet_current` |
+
+> **Tip:** These values can be set by automations (e.g. a heating schedule that adjusts temperature by time of day) or manually from the UI. The TRV controller reacts within 15 minutes at most (safety net trigger), or immediately when the value changes.
 
 ---
 
-## 5. Hardware: Permanently Open Radiator
+## 4. Hardware: Permanently Open Radiator
 
 ⚠️ **At least one radiator in your hydraulic circuit must remain permanently open** (manually set to a fixed position, not controlled by this system).
 
@@ -196,7 +193,7 @@ Stores the desired target temperature for each room. Can be controlled from the 
 
 ---
 
-## 6. Note on Condensing Boilers
+## 5. Note on Condensing Boilers
 
 If you have a **condensing gas or oil boiler**, the short-cycling protection (`min_cycle_protection`) is especially important. Condensing boilers:
 
@@ -205,3 +202,9 @@ If you have a **condensing gas or oil boiler**, the short-cycling protection (`m
 - Typically have built-in protection, but relying on it repeatedly shortens boiler lifespan
 
 The default value of **10 minutes** is suitable for most condensing boilers. Consult your boiler manual for the manufacturer's recommended minimum run time.
+
+---
+
+## What's NOT required in v2.0
+
+`sensor.valve_position_*` — these UI helper sensors were required in v1.x but are **no longer needed** in v2.0. The valve position lookup table is now computed internally by the `shelly_trv_controller` blueprint. If you are migrating from v1.x, you can delete these helpers after switching to the new blueprint.
