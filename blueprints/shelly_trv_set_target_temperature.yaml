@@ -1,0 +1,94 @@
+blueprint:
+  name: Shelly TRV - Set Target Temperature
+  description: >
+    Nastavuje cieľovú teplotu Shelly TRV cez MQTT na základe input_number.
+    Voliteľná podpora senzora okna/dverí — pri otvorení nastaví mrazovú
+    ochranu (frost_temp), pri zatvorení obnoví normálnu teplotu po 5 minútach.
+    Publishuje len ak sa teplota skutočne zmenila (zamedzuje zbytočným MQTT správam).
+  domain: automation
+  input:
+    trv_entity:
+      name: TRV Climate entita
+      description: "Climate entita Shelly TRV (napr. climate.shelly_trv_bedroom_1)"
+      selector:
+        entity:
+          domain: climate
+    target_temp_input:
+      name: Input number s cieľovou teplotou
+      description: "input_number entita s požadovanou teplotou (napr. input_number.heating_temperature_bedroom_current)"
+      selector:
+        entity:
+          domain: input_number
+    mqtt_topic:
+      name: MQTT topic pre target_t
+      description: "Napr. shellies/shellytrv_bedroom_1/thermostat/0/command/target_t"
+      selector:
+        text: {}
+    window_sensor:
+      name: Senzor okna/dverí (voliteľné)
+      description: "Binary sensor okna alebo dverí. Ak miestnosť nemá senzor, nechaj predvolenú hodnotu sun.sun (nikdy nie je 'on')."
+      default: "sun.sun"
+      selector:
+        entity: {}
+    frost_temp:
+      name: Teplota mrazovej ochrany
+      description: "Teplota nastavená pri otvorenom okne/dverách."
+      default: 8
+      selector:
+        number:
+          min: 5
+          max: 15
+          step: 0.5
+          unit_of_measurement: "°C"
+          mode: box
+
+variables:
+  trv_entity: !input trv_entity
+  target_temp_input: !input target_temp_input
+  window_sensor: !input window_sensor
+  frost_temp: !input frost_temp
+
+triggers:
+  - entity_id: !input target_temp_input
+    trigger: state
+  - entity_id: !input window_sensor
+    to: 'on'
+    for:
+      seconds: 15
+    trigger: state
+  - entity_id: !input window_sensor
+    to: 'off'
+    for:
+      minutes: 5
+    trigger: state
+
+conditions: []
+
+actions:
+  - if:
+    - condition: template
+      value_template: "{{ window_sensor != '' and states(window_sensor) == 'on' }}"
+    then:
+      - if:
+        - condition: template
+          value_template: "{{ state_attr(trv_entity, 'temperature') | float(0) != frost_temp | float(8) }}"
+        then:
+          - data:
+              topic: !input mqtt_topic
+              qos: '1'
+              payload: '{{ frost_temp | float | round(1) }}'
+            action: mqtt.publish
+    else:
+      - if:
+        - condition: template
+          value_template: >
+            {{ state_attr(trv_entity, 'temperature') | float(0) | round(1)
+               != states(target_temp_input) | float(0) | round(1) }}
+        then:
+          - data:
+              topic: !input mqtt_topic
+              qos: '1'
+              payload: '{{ states(target_temp_input) | float(0) | round(1) }}'
+            action: mqtt.publish
+
+mode: single
