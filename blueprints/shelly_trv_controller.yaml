@@ -135,7 +135,8 @@ variables:
   # for the TRV to echo the new target back via MQTT.
   desired_position: >
     {% set delta = states(target_temp_input) | float(0) - states(aqara_sensor) | float(25) %}
-    {% if states(heating_status_sensor) != 'On' %}0
+    {% if states(window_sensor) == 'on' %}0
+    {% elif states(heating_status_sensor) != 'On' %}0
     {% elif delta <= -0.10 %}0
     {% elif delta <= -0.05 %}13
     {% elif delta <= 0.00 %}18
@@ -280,5 +281,4 @@ actions:
                 {{ states(current_valve_entity) | round(0) | int == desired_position | int
                    or repeat.index >= 5 }}
 
-mode: queued
-max: 2
+mode: restart
