@@ -25,7 +25,7 @@ For a 10-TRV installation: **4 blueprints × 10 instances + 1 boiler = 31 automa
 
 ---
 
-## v2.0 — Consolidated TRV Controller (planned)
+## v2.0 — Consolidated TRV Controller (in planning — see [trv-controller-v2-plan.md](trv-controller-v2-plan.md))
 
 **Goal:** Reduce 3 per-TRV blueprints to 1, and eliminate `sensor.valve_position_*` external helpers.
 
