@@ -1,0 +1,284 @@
+blueprint:
+  name: Shelly TRV Controller
+  description: >
+    Controls a Shelly TRV: sets valve position proportionally, syncs external
+    temperature, and sets target temperature from an input_number.
+
+    Replaces three separate blueprints (set_valve_position + sync_temperature +
+    set_target_temperature) with a single automation instance per TRV.
+
+    Valve position is computed from a proportional lookup table
+    (delta = target − room temp → valve %). Hysteresis prevents valve hunting on
+    small temperature fluctuations. Short-cycling protection delays valve movement
+    until the boiler has been in its current state for a minimum time.
+
+    MQTT topics are derived from a single base topic:
+    <base>/valve_pos, <base>/ext_t, <base>/target_t
+
+    IMPORTANT: Your hydraulic circuit must have at least one permanently open
+    radiator. If all radiators close simultaneously, the boiler/pump pushes water
+    into a closed circuit — this can damage or destroy your equipment.
+  domain: automation
+  input:
+    trv_entity:
+      name: TRV Climate entity
+      description: "Climate entity of the Shelly TRV (e.g. climate.shelly_trv_bedroom_1)"
+      selector:
+        entity:
+          domain: climate
+    aqara_sensor:
+      name: External temperature sensor
+      description: "Room temperature sensor (e.g. sensor.aqara_t1_sensor_bedroom_temperature)"
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    trv_temperature_sensor:
+      name: TRV internal temperature sensor
+      description: >
+        The TRV's own temperature sensor (e.g. sensor.shelly_trv_bedroom_1_temperature).
+        Used to detect when the TRV sensor is still settling after a change — the
+        blueprint waits for stabilization before syncing the external temperature.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    current_valve_entity:
+      name: Current valve position
+      description: "Number entity reporting actual valve position (e.g. number.shelly_trv_bedroom_1_valve_position)"
+      selector:
+        entity:
+          domain: number
+    target_temp_input:
+      name: Target temperature input
+      description: "input_number with desired room temperature (e.g. input_number.heating_temperature_bedroom_current)"
+      selector:
+        entity:
+          domain: input_number
+    mqtt_topic_base:
+      name: MQTT base topic
+      description: >
+        Base MQTT topic for this TRV
+        (e.g. shellies/shellytrv_bedroom_1/thermostat/0/command).
+        Suffixes /valve_pos, /ext_t, /target_t are added automatically.
+      selector:
+        text: {}
+    window_sensor:
+      name: Window/door sensor (optional)
+      description: >
+        Binary sensor for the room window or door. When open, frost protection
+        temperature is applied. If the room has no sensor, leave as sun.sun
+        (it is never 'on' — safe no-op default).
+      default: "sun.sun"
+      selector:
+        entity: {}
+    frost_temp:
+      name: Frost protection temperature
+      description: "Temperature (°C) set on the TRV when the window/door is open."
+      default: 8
+      selector:
+        number:
+          min: 5
+          max: 15
+          step: 0.5
+          unit_of_measurement: "°C"
+          mode: box
+    heating_status_sensor:
+      name: Heating season sensor
+      description: "Sensor returning 'On' when heating is active (e.g. sensor.heating_status)."
+      default: sensor.heating_status
+      selector:
+        entity:
+          domain: sensor
+    boiler_sensor:
+      name: Boiler binary sensor
+      description: >
+        Binary sensor reflecting the actual boiler state — used for short-cycling
+        protection. (e.g. binary_sensor.protherm_24)
+      default: binary_sensor.protherm_24
+      selector:
+        entity:
+          domain: binary_sensor
+    hysteresis_threshold:
+      name: Hysteresis threshold (%)
+      description: >
+        Minimum valve position change (%) required to send an MQTT update.
+        Prevents valve hunting on small temperature fluctuations.
+        Set to 0 to disable hysteresis.
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 5
+          step: 1
+          unit_of_measurement: "%"
+          mode: box
+
+variables:
+  trv_entity: !input trv_entity
+  aqara_sensor: !input aqara_sensor
+  trv_temperature_sensor: !input trv_temperature_sensor
+  current_valve_entity: !input current_valve_entity
+  target_temp_input: !input target_temp_input
+  mqtt_topic_base: !input mqtt_topic_base
+  window_sensor: !input window_sensor
+  frost_temp: !input frost_temp
+  heating_status_sensor: !input heating_status_sensor
+  boiler_sensor: !input boiler_sensor
+  hysteresis_threshold: !input hysteresis_threshold
+  mqtt_valve_pos: "{{ mqtt_topic_base ~ '/valve_pos' }}"
+  mqtt_ext_t: "{{ mqtt_topic_base ~ '/ext_t' }}"
+  mqtt_target_t: "{{ mqtt_topic_base ~ '/target_t' }}"
+  # Valve position computed from lookup table (delta = target − room temp → %).
+  # Uses target_temp_input directly — does not depend on trv_entity.temperature
+  # so it is correct immediately after target_t is published, without waiting
+  # for the TRV to echo the new target back via MQTT.
+  desired_position: >
+    {% set delta = states(target_temp_input) | float(0) - states(aqara_sensor) | float(25) %}
+    {% if states(heating_status_sensor) != 'On' %}0
+    {% elif delta <= -0.10 %}0
+    {% elif delta <= -0.05 %}13
+    {% elif delta <= 0.00 %}18
+    {% elif delta <= 0.05 %}25
+    {% elif delta <= 0.10 %}33
+    {% elif delta <= 0.15 %}40
+    {% elif delta <= 0.20 %}48
+    {% elif delta <= 0.25 %}55
+    {% elif delta <= 0.30 %}63
+    {% elif delta <= 0.35 %}70
+    {% elif delta <= 0.40 %}78
+    {% elif delta <= 0.45 %}85
+    {% elif delta <= 0.50 %}93
+    {% else %}100
+    {% endif %}
+
+triggers:
+  # Valve position + sync temperature
+  - trigger: state
+    entity_id: !input aqara_sensor
+  # Target temperature + valve position
+  - trigger: state
+    entity_id: !input target_temp_input
+  # Frost protection — window opens
+  - trigger: state
+    entity_id: !input window_sensor
+    to: 'on'
+    for:
+      seconds: 15
+  # Restore target temp — window closes
+  - trigger: state
+    entity_id: !input window_sensor
+    to: 'off'
+    for:
+      minutes: 5
+  # Safety net — re-evaluates all three blocks every 15 minutes
+  - trigger: time_pattern
+    minutes: /15
+
+actions:
+  # ── Block 1: Set target temperature ────────────────────────────────────────
+
+  # Frost protection when window is open
+  - if:
+    - condition: template
+      value_template: >
+        {{ states(window_sensor) == 'on'
+           and state_attr(trv_entity, 'temperature') | float(0) | round(1)
+              != frost_temp | float(8) | round(1) }}
+    then:
+      - action: mqtt.publish
+        data:
+          topic: "{{ mqtt_target_t }}"
+          qos: '1'
+          payload: '{{ frost_temp | float | round(1) }}'
+
+  # Normal target temperature when window is closed
+  - if:
+    - condition: template
+      value_template: >
+        {{ states(window_sensor) != 'on'
+           and state_attr(trv_entity, 'temperature') | float(0) | round(1)
+              != states(target_temp_input) | float(0) | round(1) }}
+    then:
+      - action: mqtt.publish
+        data:
+          topic: "{{ mqtt_target_t }}"
+          qos: '1'
+          payload: '{{ states(target_temp_input) | float(0) | round(1) }}'
+
+  # ── Block 2: Sync external temperature ─────────────────────────────────────
+
+  - if:
+    - condition: template
+      value_template: >
+        {{ states(heating_status_sensor) == 'On'
+           and states(current_valve_entity) | int(0) > 0 }}
+    then:
+      # If aqara just changed and the TRV sensor hasn't settled yet, wait.
+      # This prevents sending a temperature that the TRV will immediately
+      # contradict with its own (not yet updated) reading.
+      - if:
+        - condition: template
+          value_template: >
+            {{ trigger.platform == 'state'
+               and trigger.entity_id == aqara_sensor
+               and as_timestamp(now()) - as_timestamp(states[trv_temperature_sensor].last_changed) < 300
+               and (states(aqara_sensor) | round(2) - states(trv_temperature_sensor) | round(2)) | abs > 0.04 }}
+        then:
+          - wait_template: >
+              {{ as_timestamp(now()) - as_timestamp(states[trv_temperature_sensor].last_changed) > 300 }}
+            continue_on_timeout: true
+            timeout: '300'
+      - action: mqtt.publish
+        data:
+          topic: "{{ mqtt_ext_t }}"
+          qos: '2'
+          payload: '{{ states(aqara_sensor) }}'
+
+  # ── Block 3: Set valve position ─────────────────────────────────────────────
+
+  - if:
+    - condition: template
+      value_template: >
+        {{ (states(heating_status_sensor) == 'On'
+            and (desired_position | int - states(current_valve_entity) | int(0)) | abs
+               >= hysteresis_threshold | int)
+           or (states(heating_status_sensor) == 'Off'
+               and states(current_valve_entity) | int(0) > 0) }}
+    then:
+      # Short-cycling protection: if the boiler changed state recently, wait.
+      # Prevents closing the valve too soon after the boiler started (it needs
+      # time to reach operating temperature) and prevents opening valves right
+      # after the boiler stopped (residual heat should distribute first).
+      - if:
+        - condition: template
+          value_template: >
+            {{ (desired_position | int <= 18 and states(boiler_sensor) == 'on'
+                and as_timestamp(now()) - as_timestamp(states[boiler_sensor].last_changed) < 600)
+               or (desired_position | int > 18 and states(boiler_sensor) == 'off'
+                   and as_timestamp(now()) - as_timestamp(states[boiler_sensor].last_changed) < 600) }}
+        then:
+          - wait_template: >
+              {{ as_timestamp(now()) - as_timestamp(states[boiler_sensor].last_changed) > 600 }}
+            continue_on_timeout: true
+            timeout: '660'
+      # Retry loop: publish desired position and verify TRV responded.
+      # Max 5 attempts (25 seconds total). If the TRV is offline, the /15
+      # safety net will retry on the next cycle.
+      - repeat:
+          sequence:
+            - action: mqtt.publish
+              data:
+                topic: "{{ mqtt_valve_pos }}"
+                qos: '2'
+                payload: '{{ desired_position | int }}'
+            - delay:
+                seconds: 5
+          until:
+            - condition: template
+              value_template: >
+                {{ states(current_valve_entity) | round(0) | int == desired_position | int
+                   or repeat.index >= 5 }}
+
+mode: queued
+max: 2
