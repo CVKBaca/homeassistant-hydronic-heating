@@ -113,6 +113,20 @@ blueprint:
           step: 1
           unit_of_measurement: "%"
           mode: box
+    window_close_delay:
+      name: Window close delay (minutes)
+      description: >
+        How long the window/door must be closed before restoring the normal
+        target temperature. Prevents heating from restarting after a brief
+        opening.
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 1
+          unit_of_measurement: min
+          mode: box
 
 variables:
   trv_entity: !input trv_entity
@@ -126,6 +140,7 @@ variables:
   heating_status_sensor: !input heating_status_sensor
   boiler_sensor: !input boiler_sensor
   hysteresis_threshold: !input hysteresis_threshold
+  window_close_delay: !input window_close_delay
   mqtt_valve_pos: "{{ mqtt_topic_base ~ '/valve_pos' }}"
   mqtt_ext_t: "{{ mqtt_topic_base ~ '/ext_t' }}"
   mqtt_target_t: "{{ mqtt_topic_base ~ '/target_t' }}"
@@ -171,7 +186,7 @@ triggers:
     entity_id: !input window_sensor
     to: 'off'
     for:
-      minutes: 5
+      minutes: !input window_close_delay
   # Safety net — re-evaluates all three blocks every 15 minutes
   - trigger: time_pattern
     minutes: /15
