@@ -150,3 +150,15 @@ Stores the desired target temperature for each room. Can be controlled from the 
 **Why:** When all electronically controlled TRVs close, the boiler and circulation pump still run briefly before the Turn OFF blueprint shuts them down (up to `turn_off_delay` minutes). During this time, the circuit needs an open path for water flow. Without it, pressure builds up and can damage the pump or boiler heat exchanger.
 
 **Recommended:** Choose a radiator in a room that benefits from continuous low-level heating (hallway, bathroom) and leave its TRV fully open or at a fixed position.
+
+---
+
+## 6. Note on Condensing Boilers
+
+If you have a **condensing gas or oil boiler**, the short-cycling protection (`min_cycle_protection`) is especially important. Condensing boilers:
+
+- Require a minimum run time to reach operating temperature and enter condensing mode (maximum efficiency)
+- Are more susceptible to wear from frequent short on/off cycles than conventional boilers
+- Typically have built-in protection, but relying on it repeatedly shortens boiler lifespan
+
+The default value of **10 minutes** is suitable for most condensing boilers. Consult your boiler manual for the manufacturer's recommended minimum run time.
