@@ -14,112 +14,75 @@ If all radiators close simultaneously, the boiler and circulation pump will push
 
 ---
 
-## System Architecture
+## System Architecture (v2.0)
 
 ```
-[Aqara temp sensor] ──► [sensor.valve_position_*] ──► [Set Valve Position blueprint]
-[climate target temp] ──►                                        │
-                                                                  ▼
-[Aqara temp sensor] ──────────────────────────────► [Sync Temperature blueprint]
-                                                                  │
-[input_number target] ─────────────────────────────► [Set Target Temp blueprint]
-                                                                  │
-                                                    [MQTT → Shelly TRV]
-                                                                  │
-                                              [number.shelly_trv_*_valve_position]
-                                                                  │
-                                              [binary_sensor.thermostat_*] (>18%)
-                                                                  │
-                                    ┌─────────────────────────────┘
-                                    │
-                         [Boiler Controller blueprint] ──► [boiler switch]
+[Aqara temp sensor] ──►
+[climate target temp] ──►  [shelly_trv_controller] ──► [MQTT → Shelly TRV valve_pos]
+[input_number target] ──►                            ──► [MQTT → Shelly TRV ext_t]
+[window sensor]       ──►                            ──► [MQTT → Shelly TRV target_t]
+                                │
+                     [number.shelly_trv_*_valve_position]
+                                │
+                     [binary_sensor.thermostat_*] (>18%)
+                                │
+              ┌─────────────────┘
+              │
+   [hydronic_boiler_controller] ──► [boiler switch]
 ```
+
+One `shelly_trv_controller` instance per TRV. One `hydronic_boiler_controller` total.
+
+For an 11-TRV installation: **11 + 1 = 12 automation instances** (previously 34).
 
 ---
 
 ## Prerequisites
 
-Before installing the blueprints, you need to create the following entities manually. See [docs/prerequisites.md](docs/prerequisites.md) for detailed instructions and real-world examples.
+Before installing the blueprints, create the following entities manually. See [docs/prerequisites.md](docs/prerequisites.md) for detailed instructions.
 
 | Entity | Type | Description |
 |--------|------|-------------|
-| `sensor.valve_position_*` | UI Template Sensor | Computes desired valve position (%) from temperature delta |
 | `binary_sensor.thermostat_*` | YAML Template Sensor | `true` when valve position > 18% (room needs heat) |
 | `sensor.heating_status` | UI Template Sensor | Returns `On`/`Off` based on outdoor temperature / season |
 | `input_number.*_current` | Input Number | Target temperature per room, controllable from UI |
+
+> **v2.0:** `sensor.valve_position_*` is **no longer required**. The valve position lookup table is now computed inside `shelly_trv_controller`.
 
 ---
 
 ## Blueprints
 
-### 1. Shelly TRV — Set Valve Position
+### 1. Shelly TRV Controller (v2.0)
 
-**File:** `blueprints/shelly_trv_set_valve_position.yaml`
+**File:** `blueprints/shelly_trv_controller.yaml`
 
-Controls the valve opening position based on the temperature delta between the climate target temperature and the actual room temperature (from an external Aqara sensor).
+A single blueprint replacing the three separate v1.x blueprints (`set_valve_position` + `sync_temperature` + `set_target_temperature`).
 
 **Logic:**
-- Computes `delta = target_temp − room_temp`
-- Maps delta to valve position via a proportional lookup table (0–100%)
-- Sends MQTT command only when actual position differs by ≥5% (hysteresis)
-- Protects against boiler short-cycling: waits if the boiler recently changed state
+- **Valve position:** Computes `delta = target_temp − room_temp`, maps to 0–100% via a proportional lookup table, sends MQTT `valve_pos` command when position differs by ≥5% (hysteresis). Protects against boiler short-cycling.
+- **Temperature sync:** Sends room temperature to the TRV via MQTT `ext_t` (overrides the TRV's internal sensor, which reads high due to valve motor heat).
+- **Target temperature:** Sets TRV target via MQTT `target_t` when `input_number` changes. Supports window/door sensor for frost protection.
 
 **Parameters:**
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
 | `trv_entity` | ✅ | — | Climate entity of the Shelly TRV |
-| `valve_position_sensor` | ✅ | — | `sensor.valve_position_*` for this TRV |
-| `current_valve_entity` | ✅ | — | `number.shelly_trv_*_valve_position` |
-| `aqara_sensor` | ✅ | — | External temperature sensor |
-| `mqtt_topic` | ✅ | — | MQTT topic for `valve_pos` command |
-| `heating_status_sensor` | ⬜ | `sensor.heating_status` | Heating season sensor |
-| `boiler_sensor` | ⬜ | `binary_sensor.protherm_24` | Boiler binary sensor for short-cycling protection |
-
----
-
-### 2. Shelly TRV — Sync External Temperature
-
-**File:** `blueprints/shelly_trv_sync_temperature.yaml`
-
-Sends the external Aqara room temperature to the Shelly TRV via MQTT (`ext_t` command). This overrides the TRV's internal sensor, which is less accurate due to heat from the valve motor.
-
-**Logic:**
-- Triggers on every Aqara sensor state change
-- Runs only when the valve is open (> 0%) and heating is active
-- If the TRV's own sensor changed recently and differs by > 0.04°C, waits up to 5 minutes for it to stabilise
-
-**Parameters:**
-
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `aqara_sensor` | ✅ | — | External temperature sensor |
+| `aqara_sensor` | ✅ | — | External room temperature sensor (Aqara or similar) |
 | `trv_temperature_sensor` | ✅ | — | TRV's built-in temperature sensor |
-| `valve_position_sensor` | ✅ | — | `sensor.valve_position_*` for this TRV |
-| `mqtt_topic` | ✅ | — | MQTT topic for `ext_t` command |
+| `current_valve_entity` | ✅ | — | `number.shelly_trv_*_valve_position` |
+| `target_temp_input` | ✅ | — | `input_number` with desired room temperature |
+| `mqtt_topic_base` | ✅ | — | Base MQTT topic (e.g. `shellies/shellytrv_bedroom_1/thermostat/0/command`) |
+| `window_sensor` | ⬜ | `sun.sun` | Window/door sensor for frost protection |
+| `frost_temp` | ⬜ | `8` | Frost temperature when window is open (°C) |
 | `heating_status_sensor` | ⬜ | `sensor.heating_status` | Heating season sensor |
+| `boiler_sensor` | ⬜ | `binary_sensor.protherm_24` | Boiler sensor for short-cycling protection |
+| `window_close_delay` | ⬜ | `5` | Minutes to wait after window closes before restoring temperature |
 
 ---
 
-### 3. Shelly TRV — Set Target Temperature
-
-**File:** `blueprints/shelly_trv_set_target_temperature.yaml`
-
-Sets the TRV target temperature via MQTT when the corresponding `input_number` changes. Optionally supports a window/door sensor — when the window opens, sets frost protection temperature; when it closes, restores normal temperature after 5 minutes.
-
-**Parameters:**
-
-| Parameter | Required | Default | Description |
-|-----------|----------|---------|-------------|
-| `trv_entity` | ✅ | — | Climate entity of the Shelly TRV |
-| `target_temp_input` | ✅ | — | `input_number` with desired temperature |
-| `mqtt_topic` | ✅ | — | MQTT topic for `target_t` command |
-| `window_sensor` | ⬜ | `sun.sun` | Window/door binary sensor. Leave default if none. |
-| `frost_temp` | ⬜ | `8` | Frost protection temperature (°C) when window is open |
-
----
-
-### 4. Hydronic Boiler Controller
+### 2. Hydronic Boiler Controller
 
 **File:** `blueprints/hydronic_boiler_controller.yaml`
 
@@ -155,9 +118,13 @@ See [docs/installation.md](docs/installation.md).
 
 See [docs/configuration.md](docs/configuration.md).
 
+## Migrating from v1.x
+
+See [docs/installation.md](docs/installation.md#migrating-from-v1x) for step-by-step migration instructions.
+
 ## Roadmap
 
-See [docs/roadmap.md](docs/roadmap.md) for planned improvements, including a consolidated single TRV controller blueprint (v2.0).
+See [docs/roadmap.md](docs/roadmap.md).
 
 ## License
 
