@@ -1,0 +1,169 @@
+blueprint:
+  name: Hydronic Presence Controller
+  description: >
+    Controls heating mode and domestic hot water based on household presence.
+
+    Away: Switches to Away mode and turns off hot water immediately when everyone leaves.
+
+    Holiday: Switches to Holiday mode after the household has been away for a
+    configurable number of hours (default 18h). Holiday mode typically uses a single
+    frost-protection temperature for the whole house.
+
+    Return home: Turns hot water back on and restores the correct heating mode
+    based on the current time of day.
+
+    Also handles:
+    - Morning water re-enable (06:00) — in case hot water was turned off at midnight
+      while people were home
+    - Midnight water off (00:00) — safety fallback to stop hot water heating overnight
+
+    Pair this blueprint with the Hydronic Heating Schedule blueprint for time-based
+    mode switching.
+  domain: automation
+  input:
+    person_group:
+      name: Person group
+      description: "group entity used to detect presence (e.g. group.person)"
+      selector:
+        entity:
+          domain: group
+    heating_mode_entity:
+      name: Heating mode selector
+      description: "input_select entity controlling the heating mode"
+      selector:
+        entity:
+          domain: input_select
+    hot_water_switch:
+      name: Hot water switch
+      description: >
+        Switch controlling hot water heating. NOTE: inverted logic —
+        switch ON = heating stopped, switch OFF = heating active.
+      selector:
+        entity:
+          domain: switch
+    hot_water_input_sensor:
+      name: Hot water physical input sensor
+      description: >
+        Binary sensor reflecting the physical input state of the hot water relay
+        (e.g. binary_sensor.hot_water_stopper_input). When ON, hot water is
+        manually overridden — automation will not turn it on.
+      selector:
+        entity:
+          domain: binary_sensor
+    holiday_threshold_hours:
+      name: Holiday threshold (hours)
+      description: "Hours away before switching to Holiday mode (default: 18)"
+      default: 18
+      selector:
+        number:
+          min: 1
+          max: 72
+          unit_of_measurement: h
+
+variables:
+  person_group: !input person_group
+  heating_mode_entity: !input heating_mode_entity
+  hot_water_switch: !input hot_water_switch
+  hot_water_input_sensor: !input hot_water_input_sensor
+  holiday_threshold_hours: !input holiday_threshold_hours
+
+triggers:
+  - trigger: state
+    entity_id: !input person_group
+    to: not_home
+    id: left_home
+  - trigger: state
+    entity_id: !input person_group
+    to: not_home
+    for:
+      hours: !input holiday_threshold_hours
+    id: away_18h
+  - trigger: state
+    entity_id: !input person_group
+    to: home
+    from: not_home
+    id: arrived_home
+  - trigger: time
+    at: "06:00:00"
+    id: morning_water
+  - trigger: time
+    at: "00:00:00"
+    id: midnight_water
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: away_18h
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input heating_mode_entity
+            data:
+              option: Holiday
+
+      - conditions:
+          - condition: trigger
+            id: left_home
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input heating_mode_entity
+            data:
+              option: Away
+          - action: switch.turn_on
+            target:
+              entity_id: !input hot_water_switch
+            data: {}
+
+      - conditions:
+          - condition: trigger
+            id: arrived_home
+        sequence:
+          - if:
+              - condition: state
+                entity_id: !input hot_water_input_sensor
+                state: "off"
+            then:
+              - action: switch.turn_off
+                target:
+                  entity_id: !input hot_water_switch
+                data: {}
+          - action: input_select.select_option
+            target:
+              entity_id: !input heating_mode_entity
+            data:
+              option: >
+                {% set h = now().hour %}
+                {% if h >= 6 and h < 7 %}Morning
+                {% elif h >= 7 and is_state('sun.sun', 'above_horizon') %}Day
+                {% elif is_state('sun.sun', 'below_horizon') and h < 22 %}Evening
+                {% else %}Night
+                {% endif %}
+
+      - conditions:
+          - condition: trigger
+            id: morning_water
+          - condition: state
+            entity_id: !input person_group
+            state: home
+          - condition: state
+            entity_id: !input hot_water_input_sensor
+            state: "off"
+        sequence:
+          - action: switch.turn_off
+            target:
+              entity_id: !input hot_water_switch
+            data: {}
+
+      - conditions:
+          - condition: trigger
+            id: midnight_water
+        sequence:
+          - action: switch.turn_on
+            target:
+              entity_id: !input hot_water_switch
+            data: {}
+
+mode: queued
+max: 3

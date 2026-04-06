@@ -1,0 +1,164 @@
+blueprint:
+  name: Hydronic Heating Schedule
+  description: >
+    Switches the heating mode (Morning / Day / Evening / Night) based on time
+    of day and presence. Evening is triggered at sunset with a configurable offset.
+
+    When someone arrives home, the correct mode is automatically determined
+    based on the current time so the house warms up immediately.
+
+    SUNSET OFFSET: Use negative values to trigger before sunset (e.g. -00:30:00 = 30 min
+    before), positive values for after sunset (e.g. 00:30:00). Default: 00:00:00 (at sunset).
+    Note: make sure the effective evening time (sunset ± offset) does not overlap with
+    your Day time or Night time — if it does, the Evening mode will be silently skipped.
+
+    Pair this blueprint with the Hydronic Presence Controller blueprint to handle
+    Away and Holiday modes automatically.
+  domain: automation
+  input:
+    heating_mode_entity:
+      name: Heating mode selector
+      description: "input_select entity with options: Morning, Day, Evening, Night (and optionally Away, Holiday)"
+      selector:
+        entity:
+          domain: input_select
+    person_group:
+      name: Person group
+      description: "group entity used to check if anyone is home (e.g. group.person)"
+      selector:
+        entity:
+          domain: group
+    morning_time:
+      name: Morning time
+      description: "Time to switch to Morning mode (e.g. 06:00:00)"
+      default: "06:00:00"
+      selector:
+        time:
+    day_time:
+      name: Day time
+      description: "Time to switch to Day mode (e.g. 07:00:00)"
+      default: "07:00:00"
+      selector:
+        time:
+    evening_offset:
+      name: Evening offset from sunset
+      description: >
+        Offset applied to the sunset trigger. Format: HH:MM:SS.
+        Use a minus sign for before sunset (e.g. -00:30:00),
+        no sign or + for after sunset (e.g. 00:30:00).
+        Make sure sunset ± offset falls between your Day time and Night time,
+        otherwise Evening mode will be silently skipped.
+      default: "00:00:00"
+      selector:
+        text:
+    night_time:
+      name: Night time
+      description: "Time to switch to Night mode (e.g. 22:00:00)"
+      default: "22:00:00"
+      selector:
+        time:
+
+variables:
+  person_group: !input person_group
+  heating_mode_entity: !input heating_mode_entity
+  morning_time: !input morning_time
+  day_time: !input day_time
+  night_time: !input night_time
+
+triggers:
+  - trigger: time
+    at: !input morning_time
+    id: morning
+  - trigger: time
+    at: !input day_time
+    id: day
+  - trigger: sun
+    event: sunset
+    offset: !input evening_offset
+    id: evening
+  - trigger: time
+    at: !input night_time
+    id: night
+  - trigger: state
+    entity_id: !input person_group
+    to: home
+    id: person_home
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: morning
+          - condition: state
+            entity_id: !input person_group
+            state: home
+          - condition: time
+            before: !input day_time
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input heating_mode_entity
+            data:
+              option: Morning
+
+      - conditions:
+          - condition: trigger
+            id: day
+          - condition: state
+            entity_id: !input person_group
+            state: home
+          - condition: sun
+            before: sunset
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input heating_mode_entity
+            data:
+              option: Day
+
+      - conditions:
+          - condition: trigger
+            id: evening
+          - condition: state
+            entity_id: !input person_group
+            state: home
+          - condition: time
+            after: !input day_time
+            before: !input night_time
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input heating_mode_entity
+            data:
+              option: Evening
+
+      - conditions:
+          - condition: trigger
+            id: night
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input heating_mode_entity
+            data:
+              option: Night
+
+      - conditions:
+          - condition: trigger
+            id: person_home
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input heating_mode_entity
+            data:
+              option: >
+                {% set h = now().hour %}
+                {% set morning_h = morning_time[:2] | int %}
+                {% set day_h = day_time[:2] | int %}
+                {% set night_h = night_time[:2] | int %}
+                {% if h >= morning_h and h < day_h %}Morning
+                {% elif h >= day_h and is_state('sun.sun', 'above_horizon') %}Day
+                {% elif is_state('sun.sun', 'below_horizon') and h < night_h %}Evening
+                {% else %}Night
+                {% endif %}
+
+mode: single

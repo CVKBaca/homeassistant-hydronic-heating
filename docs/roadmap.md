@@ -4,7 +4,31 @@ This document describes the architectural evolution of the hydronic heating blue
 
 ---
 
-## Current Architecture (v2.0) — Released 2026-04-05
+## Current Architecture (v3.0) — Released 2026-04-07
+
+The current system uses **4 blueprints**:
+
+| Blueprint | Instances | Purpose |
+|-----------|-----------|---------|
+| `shelly_trv_controller` | 1× per TRV | Valve control + temperature sync + target temperature |
+| `hydronic_boiler_controller` | 1× total | Boiler on/off with short-cycling protection |
+| `hydronic_heating_schedule` | 1× total | Morning/Day/Evening/Night mode switching by time + sun |
+| `hydronic_presence_controller` | 1× total | Away/Holiday mode + hot water by presence |
+
+**External prerequisites:**
+- `binary_sensor.thermostat_*` — 1× per room
+- `sensor.heating_status` — 1× (heating season sensor)
+- `input_number.*_current` — 1× per room
+- `input_number.*_morning/day/evening/night/away_mode` — 5× per room
+- `input_number.heating_temperature_house_holiday_mode` — 1× global
+- `input_select.heating_mode` — 1× (Morning/Day/Evening/Night/Away/Holiday)
+- `heating_apply_mode` plain automation — 1× (maps mode to room temperatures)
+
+For an 11-TRV installation: **11 + 3 = 14 automation instances** + 1 plain automation (down from 34 in v1.x).
+
+---
+
+## Previous Architecture (v2.0) — Released 2026-04-05
 
 The current system uses **2 blueprints** (down from 4 in v1.x):
 

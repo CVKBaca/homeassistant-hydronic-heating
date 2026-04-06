@@ -14,26 +14,36 @@ If all radiators close simultaneously, the boiler and circulation pump will push
 
 ---
 
-## System Architecture (v2.0)
+## System Architecture (v3.0)
 
 ```
-[Aqara temp sensor] ──►
+[hydronic_heating_schedule]  ──►
+[hydronic_presence_controller] ──►  input_select.heating_mode
+                                              │
+                                   [heating_apply_mode*]
+                                              │
+                                   input_number.*_current
+                                              │
+[Aqara temp sensor]  ──►
 [climate target temp] ──►  [shelly_trv_controller] ──► [MQTT → Shelly TRV valve_pos]
-[input_number target] ──►                            ──► [MQTT → Shelly TRV ext_t]
-[window sensor]       ──►                            ──► [MQTT → Shelly TRV target_t]
-                                │
-                     [number.shelly_trv_*_valve_position]
-                                │
-                     [binary_sensor.thermostat_*] (>18%)
-                                │
-              ┌─────────────────┘
-              │
-   [hydronic_boiler_controller] ──► [boiler switch]
+[window sensor]       ──►                            ──► [MQTT → Shelly TRV ext_t]
+                                              │          [MQTT → Shelly TRV target_t]
+                               [number.shelly_trv_*_valve_position]
+                                              │
+                               [binary_sensor.thermostat_*] (>18%)
+                                              │
+                          ┌───────────────────┘
+                          │
+              [hydronic_boiler_controller] ──► [boiler switch]
+
+[hydronic_presence_controller] ──► [hot water switch]
 ```
 
-One `shelly_trv_controller` instance per TRV. One `hydronic_boiler_controller` total.
+`*` `heating_apply_mode` is a plain automation (not a blueprint) — see [docs/heating-schedule.md](docs/heating-schedule.md).
 
-For an 11-TRV installation: **11 + 1 = 12 automation instances** (previously 34).
+One `shelly_trv_controller` instance per TRV. One instance each of `hydronic_boiler_controller`, `hydronic_heating_schedule`, and `hydronic_presence_controller`.
+
+For an 11-TRV installation: **11 + 3 = 14 automation instances** (previously 34).
 
 ---
 
@@ -107,6 +117,51 @@ Controls the boiler based on aggregate heating demand from all rooms. Handles bo
 | `heating_status_sensor` | ⬜ | `sensor.heating_status` | Heating season sensor |
 | `min_cycle_protection` | ⬜ | `10` | Minutes since last boiler state change before allowing turn-on |
 | `turn_off_delay` | ⬜ | `10` | Minutes all thermostats must be off before turning off the boiler |
+
+---
+
+### 3. Hydronic Heating Schedule
+
+**File:** `blueprints/hydronic_heating_schedule.yaml`
+
+Switches `input_select.heating_mode` between Morning / Day / Evening / Night based on time of day and presence. Evening is triggered at sunset with a configurable offset.
+
+When someone arrives home, the correct mode is automatically determined from the current time — no manual intervention needed.
+
+**Parameters:**
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `heating_mode_entity` | ✅ | — | `input_select` with Morning/Day/Evening/Night options |
+| `person_group` | ✅ | — | `group` entity for presence detection |
+| `morning_time` | ⬜ | `06:00:00` | Time to switch to Morning mode |
+| `day_time` | ⬜ | `07:00:00` | Time to switch to Day mode |
+| `evening_offset` | ⬜ | `00:00:00` | Offset from sunset (e.g. `-00:30:00` = 30 min before sunset) |
+| `night_time` | ⬜ | `22:00:00` | Time to switch to Night mode |
+
+> **Collision protection:** If `sunset ± evening_offset` falls outside the window between `day_time` and `night_time`, the Evening mode switch is silently skipped. Make sure your offset does not push the Evening trigger before Day time or after Night time.
+
+---
+
+### 4. Hydronic Presence Controller
+
+**File:** `blueprints/hydronic_presence_controller.yaml`
+
+Controls `input_select.heating_mode` and domestic hot water based on household presence. Handles Away mode (immediate), Holiday mode (after configurable hours away), and automatic mode restoration on return.
+
+Also manages hot water: turns it off when everyone leaves, back on when someone returns, and provides a midnight safety off (00:00) and morning re-enable (06:00).
+
+**Parameters:**
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `person_group` | ✅ | — | `group` entity for household presence |
+| `heating_mode_entity` | ✅ | — | `input_select.heating_mode` |
+| `hot_water_switch` | ✅ | — | Switch controlling hot water (inverted: ON = stopped) |
+| `hot_water_input_sensor` | ✅ | — | Binary sensor for physical override input |
+| `holiday_threshold_hours` | ⬜ | `18` | Hours away before switching to Holiday mode |
+
+See [docs/presence-control.md](docs/presence-control.md) for full details including hot water wiring and mode interaction.
 
 ---
 
