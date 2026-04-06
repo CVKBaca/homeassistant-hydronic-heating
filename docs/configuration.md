@@ -6,8 +6,6 @@ This page shows example automation configurations for a typical multi-room setup
 
 ## Shelly TRV Controller — Example (with window sensor)
 
-A single automation instance replaces the three separate v1.x blueprints.
-
 ```yaml
 alias: Shelly TRV Bedroom 1 - Controller
 use_blueprint:
@@ -58,7 +56,7 @@ Note that bedroom_1 and bedroom_2 share one Aqara temperature sensor, as do livi
 # Bathroom
 - alias: Shelly TRV Bathroom - Controller
   use_blueprint:
-    path: local/shelly_trv_controller.yaml
+    path: hydronic-heating/shelly_trv_controller.yaml
     input:
       trv_entity: climate.shelly_trv_bathroom
       aqara_sensor: sensor.aqara_t1_sensor_bathroom_temperature
@@ -70,7 +68,7 @@ Note that bedroom_1 and bedroom_2 share one Aqara temperature sensor, as do livi
 # Bedroom 1 (shares Aqara sensor with Bedroom 2)
 - alias: Shelly TRV Bedroom 1 - Controller
   use_blueprint:
-    path: local/shelly_trv_controller.yaml
+    path: hydronic-heating/shelly_trv_controller.yaml
     input:
       trv_entity: climate.shelly_trv_bedroom_1
       aqara_sensor: sensor.aqara_t1_sensor_bedroom_temperature
@@ -83,7 +81,7 @@ Note that bedroom_1 and bedroom_2 share one Aqara temperature sensor, as do livi
 # Bedroom 2 (shares Aqara sensor with Bedroom 1)
 - alias: Shelly TRV Bedroom 2 - Controller
   use_blueprint:
-    path: local/shelly_trv_controller.yaml
+    path: hydronic-heating/shelly_trv_controller.yaml
     input:
       trv_entity: climate.shelly_trv_bedroom_2
       aqara_sensor: sensor.aqara_t1_sensor_bedroom_temperature
@@ -96,7 +94,7 @@ Note that bedroom_1 and bedroom_2 share one Aqara temperature sensor, as do livi
 # Living Room 2 (shares Aqara sensor with Living Room 3)
 - alias: Shelly TRV Living Room 2 - Controller
   use_blueprint:
-    path: local/shelly_trv_controller.yaml
+    path: hydronic-heating/shelly_trv_controller.yaml
     input:
       trv_entity: climate.shelly_trv_living_room_2
       aqara_sensor: sensor.aqara_t1_sensor_living_room_temperature
@@ -108,7 +106,7 @@ Note that bedroom_1 and bedroom_2 share one Aqara temperature sensor, as do livi
 # Living Room 3 (shares Aqara sensor with Living Room 2)
 - alias: Shelly TRV Living Room 3 - Controller
   use_blueprint:
-    path: local/shelly_trv_controller.yaml
+    path: hydronic-heating/shelly_trv_controller.yaml
     input:
       trv_entity: climate.shelly_trv_living_room_3
       aqara_sensor: sensor.aqara_t1_sensor_living_room_temperature
@@ -120,7 +118,7 @@ Note that bedroom_1 and bedroom_2 share one Aqara temperature sensor, as do livi
 # Kitchen
 - alias: Shelly TRV Kitchen - Controller
   use_blueprint:
-    path: local/shelly_trv_controller.yaml
+    path: hydronic-heating/shelly_trv_controller.yaml
     input:
       trv_entity: climate.shelly_trv_kitchen
       aqara_sensor: sensor.aqara_t1_sensor_kitchen_temperature
@@ -132,7 +130,7 @@ Note that bedroom_1 and bedroom_2 share one Aqara temperature sensor, as do livi
 # Corridor
 - alias: Shelly TRV Corridor - Controller
   use_blueprint:
-    path: local/shelly_trv_controller.yaml
+    path: hydronic-heating/shelly_trv_controller.yaml
     input:
       trv_entity: climate.shelly_trv_corridor
       aqara_sensor: sensor.aqara_t1_sensor_podesta_temperature
@@ -144,7 +142,7 @@ Note that bedroom_1 and bedroom_2 share one Aqara temperature sensor, as do livi
 # Hall
 - alias: Shelly TRV Hall - Controller
   use_blueprint:
-    path: local/shelly_trv_controller.yaml
+    path: hydronic-heating/shelly_trv_controller.yaml
     input:
       trv_entity: climate.shelly_trv_hall
       aqara_sensor: sensor.aqara_t1_sensor_hall_temperature
@@ -156,7 +154,7 @@ Note that bedroom_1 and bedroom_2 share one Aqara temperature sensor, as do livi
 # Toilet
 - alias: Shelly TRV Toilet - Controller
   use_blueprint:
-    path: local/shelly_trv_controller.yaml
+    path: hydronic-heating/shelly_trv_controller.yaml
     input:
       trv_entity: climate.shelly_trv_toilet
       aqara_sensor: sensor.aqara_t1_sensor_toilet_temperature
@@ -190,6 +188,47 @@ use_blueprint:
     # min_cycle_protection: 10
     # turn_off_delay: 10
 ```
+
+---
+
+## Heating Schedule — Example
+
+One automation instance controls the Morning/Day/Evening/Night time switching:
+
+```yaml
+alias: Heating Schedule
+use_blueprint:
+  path: hydronic-heating/hydronic_heating_schedule.yaml
+  input:
+    heating_mode_entity: input_select.heating_mode
+    person_group: group.family
+    morning_time: "06:00:00"
+    day_time: "07:00:00"
+    evening_offset: "-00:30:00"   # 30 minutes before sunset
+    night_time: "22:00:00"
+```
+
+> **Evening offset:** A negative value triggers Evening mode before sunset, positive after. Make sure the computed sunset time stays between `day_time` and `night_time` — otherwise the Evening trigger is silently skipped.
+
+---
+
+## Presence Controller — Example
+
+One automation instance handles Away/Holiday mode and domestic hot water:
+
+```yaml
+alias: Heating Presence Controller
+use_blueprint:
+  path: hydronic-heating/hydronic_presence_controller.yaml
+  input:
+    person_group: group.family
+    heating_mode_entity: input_select.heating_mode
+    hot_water_switch: switch.hot_water_stopper
+    hot_water_input_sensor: binary_sensor.hot_water_stopper_input
+    holiday_threshold_hours: 18
+```
+
+See [presence-control.md](presence-control.md) for hot water wiring details and how to create a dummy `hot_water_input_sensor` if you do not have a physical override input.
 
 ---
 

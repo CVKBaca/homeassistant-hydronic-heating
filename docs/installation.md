@@ -10,8 +10,6 @@ Follow [prerequisites.md](prerequisites.md) to create:
 
 Restart Home Assistant after adding the YAML template sensors.
 
-> **Note:** `sensor.valve_position_*` is **not required** in v2.0. The valve position lookup table is now computed inside the `shelly_trv_controller` blueprint.
-
 ---
 
 ## Step 2 — Install the Blueprints
@@ -22,6 +20,8 @@ Copy the `.yaml` files from the `blueprints/` directory to your Home Assistant b
 /config/blueprints/automation/hydronic-heating/
     shelly_trv_controller.yaml
     hydronic_boiler_controller.yaml
+    hydronic_heating_schedule.yaml
+    hydronic_presence_controller.yaml
 ```
 
 Or install directly via the Home Assistant UI:
@@ -34,16 +34,18 @@ Use the raw GitHub URL for each blueprint file.
 
 ## Step 3 — Create Automation Instances
 
-Create one `shelly_trv_controller` instance per TRV, plus one `hydronic_boiler_controller` instance total:
-
-| Blueprint | Instances |
-|-----------|-----------|
-| `shelly_trv_controller` | 1× per TRV |
-| `hydronic_boiler_controller` | 1× total |
+| Blueprint | Instances | Purpose |
+|-----------|-----------|---------|
+| `shelly_trv_controller` | 1× per TRV | Valve control, temperature sync, target temperature |
+| `hydronic_boiler_controller` | 1× total | Boiler on/off with short-cycling protection |
+| `hydronic_heating_schedule` | 1× total | Morning/Day/Evening/Night switching by time + sun |
+| `hydronic_presence_controller` | 1× total | Away/Holiday mode + hot water by presence |
 
 **Settings → Automations & Scenes → Create Automation → Use a Blueprint**
 
 See [configuration.md](configuration.md) for parameter examples.
+
+Before creating automation instances for `hydronic_heating_schedule` and `hydronic_presence_controller`, complete Steps 4–6 in [heating-schedule.md](heating-schedule.md) (create `input_select.heating_mode`, per-room temperature helpers, and the `heating_apply_mode` plain automation).
 
 ---
 
@@ -78,14 +80,3 @@ Find your device IDs in the Shelly app or from MQTT discovery in Home Assistant.
 5. Lower the target temperature back
 6. Verify the valve closes and the boiler turns off after `turn_off_delay` minutes
 
----
-
-## Migrating from v1.x
-
-If you are migrating from the 3-blueprint system (`set_valve_position` + `sync_temperature` + `set_target_temperature`):
-
-1. Install `shelly_trv_controller.yaml` blueprint
-2. Create new automation instances (one per TRV)
-3. Run alongside v1.x automations for 2–3 days (disable, not delete)
-4. If stable: delete old 3× automation instances per TRV + old 3 blueprints
-5. Delete `sensor.valve_position_*` UI helpers — no longer needed

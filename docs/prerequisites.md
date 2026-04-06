@@ -100,15 +100,15 @@ This sensor is `on` when a room is actively heating (valve position > 18%). It i
       state: >-
         {{ states('number.shelly_trv_hall_valve_position') | int(0) > 18 }}
 
-    - name: "Thermostat - Matej"
-      unique_id: "thermostat_matej"
+    - name: "Thermostat - Room A"
+      unique_id: "thermostat_room_a"
       state: >-
-        {{ states('number.shelly_trv_matej_valve_position') | int(0) > 18 }}
+        {{ states('number.shelly_trv_room_a_valve_position') | int(0) > 18 }}
 
-    - name: "Thermostat - Richard"
-      unique_id: "thermostat_richard"
+    - name: "Thermostat - Room B"
+      unique_id: "thermostat_room_b"
       state: >-
-        {{ states('number.shelly_trv_richard_valve_position') | int(0) > 18 }}
+        {{ states('number.shelly_trv_room_b_valve_position') | int(0) > 18 }}
 
     - name: "Thermostat - Toilet"
       unique_id: "thermostat_toilet"
@@ -203,8 +203,3 @@ If you have a **condensing gas or oil boiler**, the short-cycling protection (`m
 
 The default value of **10 minutes** is suitable for most condensing boilers. Consult your boiler manual for the manufacturer's recommended minimum run time.
 
----
-
-## What's NOT required in v2.0
-
-`sensor.valve_position_*` — these UI helper sensors were required in v1.x but are **no longer needed** in v2.0. The valve position lookup table is now computed internally by the `shelly_trv_controller` blueprint. If you are migrating from v1.x, you can delete these helpers after switching to the new blueprint.

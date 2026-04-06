@@ -24,7 +24,7 @@ The current system uses **4 blueprints**:
 - `input_select.heating_mode` — 1× (Morning/Day/Evening/Night/Away/Holiday)
 - `heating_apply_mode` plain automation — 1× (maps mode to room temperatures)
 
-For an 11-TRV installation: **11 + 3 = 14 automation instances** + 1 plain automation (down from 34 in v1.x).
+For an 11-TRV installation: **11 + 3 = 14 automation instances** + 1 plain automation.
 
 ---
 
@@ -42,28 +42,7 @@ The current system uses **2 blueprints** (down from 4 in v1.x):
 - `sensor.heating_status` — 1× (heating season sensor)
 - `input_number.*_current` — 1× per room
 
-For an 11-TRV installation: **11 + 1 = 12 automation instances** (down from 34 in v1.x).
-
-> **`sensor.valve_position_*` is no longer required.** The proportional lookup table is now computed inside `shelly_trv_controller`.
-
----
-
-## v1.x Architecture (archived)
-
-The previous system used **4 blueprints** (reduced from 5 in v1.0 by merging the boiler turn on/off into a single controller):
-
-| Blueprint | Instances | Purpose |
-|-----------|-----------|---------|
-| `shelly_trv_set_valve_position` | 1× per TRV | Proportional valve control |
-| `shelly_trv_sync_temperature` | 1× per TRV | External temperature to TRV |
-| `shelly_trv_set_target_temperature` | 1× per TRV | Target temp from input_number |
-| `hydronic_boiler_controller` | 1× total | Boiler on/off with protection |
-
-Additional prerequisite: `sensor.valve_position_*` — 1× per TRV (proportional lookup table, UI template sensor).
-
-For a 10-TRV installation: **4 × 10 + 1 = 31 automation instances** + 10 external helper sensors.
-
-The v1.x blueprint files are still included in this repository for users who have not yet migrated.
+For an 11-TRV installation: **11 + 1 = 12 automation instances**.
 
 ---
 

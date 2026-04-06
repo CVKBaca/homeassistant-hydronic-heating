@@ -43,7 +43,7 @@ If all radiators close simultaneously, the boiler and circulation pump will push
 
 One `shelly_trv_controller` instance per TRV. One instance each of `hydronic_boiler_controller`, `hydronic_heating_schedule`, and `hydronic_presence_controller`.
 
-For an 11-TRV installation: **11 + 3 = 14 automation instances** (previously 34).
+For an 11-TRV installation: **11 + 3 = 14 automation instances**.
 
 ---
 
@@ -57,17 +57,13 @@ Before installing the blueprints, create the following entities manually. See [d
 | `sensor.heating_status` | UI Template Sensor | Returns `On`/`Off` based on outdoor temperature / season |
 | `input_number.*_current` | Input Number | Target temperature per room, controllable from UI |
 
-> **v2.0:** `sensor.valve_position_*` is **no longer required**. The valve position lookup table is now computed inside `shelly_trv_controller`.
-
 ---
 
 ## Blueprints
 
-### 1. Shelly TRV Controller (v2.0)
+### 1. Shelly TRV Controller
 
 **File:** `blueprints/shelly_trv_controller.yaml`
-
-A single blueprint replacing the three separate v1.x blueprints (`set_valve_position` + `sync_temperature` + `set_target_temperature`).
 
 **Logic:**
 - **Valve position:** Computes `delta = target_temp − room_temp`, maps to 0–100% via a proportional lookup table, sends MQTT `valve_pos` command when position differs by ≥5% (hysteresis). Protects against boiler short-cycling.
@@ -172,10 +168,6 @@ See [docs/installation.md](docs/installation.md).
 ## Configuration Examples
 
 See [docs/configuration.md](docs/configuration.md).
-
-## Migrating from v1.x
-
-See [docs/installation.md](docs/installation.md#migrating-from-v1x) for step-by-step migration instructions.
 
 ## Roadmap
 
