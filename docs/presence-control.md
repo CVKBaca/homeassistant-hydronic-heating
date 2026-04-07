@@ -108,3 +108,17 @@ Both blueprints can set `input_select.heating_mode`. They do not conflict:
 - **Presence Controller** overrides to Away/Holiday when nobody is home, and restores a time-appropriate mode on return
 
 When someone returns home, the Presence Controller sets a time-appropriate mode, and the Heating Schedule will continue switching modes normally from its next trigger onwards.
+
+---
+
+## Boot behaviour
+
+After a Home Assistant restart, the Presence Controller automatically re-evaluates the household presence state at **t+3 minutes**:
+
+| State at boot | Action |
+|---------------|--------|
+| Nobody home, away < `holiday_threshold_hours` | → Away mode + hot water OFF |
+| Nobody home, away ≥ `holiday_threshold_hours` | → Holiday mode + hot water OFF |
+| Someone home, hot water input sensor OFF | → Hot water ON (no mode change — Heating Schedule handles the mode) |
+
+The 3-minute delay ensures the Heating Schedule blueprint has already set the correct time-based mode first (t+1 min), and `heating_apply_mode` has run (t+2 min), before the Presence Controller potentially overrides to Away/Holiday.

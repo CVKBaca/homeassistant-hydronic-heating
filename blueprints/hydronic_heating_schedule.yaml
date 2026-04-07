@@ -83,6 +83,9 @@ triggers:
     entity_id: !input person_group
     to: home
     id: person_home
+  - trigger: event
+    event_type: homeassistant_started
+    id: boot
 
 actions:
   - choose:
@@ -146,6 +149,29 @@ actions:
           - condition: trigger
             id: person_home
         sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input heating_mode_entity
+            data:
+              option: >
+                {% set h = now().hour %}
+                {% set morning_h = morning_time[:2] | int %}
+                {% set day_h = day_time[:2] | int %}
+                {% set night_h = night_time[:2] | int %}
+                {% if h >= morning_h and h < day_h %}Morning
+                {% elif h >= day_h and is_state('sun.sun', 'above_horizon') %}Day
+                {% elif is_state('sun.sun', 'below_horizon') and h < night_h %}Evening
+                {% else %}Night
+                {% endif %}
+
+      # Boot: set correct time-based mode after HA restart
+      # 1 min delay — runs before apply_mode in the boot orchestrator (t+2min)
+      - conditions:
+          - condition: trigger
+            id: boot
+        sequence:
+          - delay:
+              minutes: 1
           - action: input_select.select_option
             target:
               entity_id: !input heating_mode_entity

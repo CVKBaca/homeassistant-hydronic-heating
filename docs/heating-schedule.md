@@ -175,25 +175,48 @@ Install [Hydronic Heating Schedule](../blueprints/hydronic_heating_schedule.yaml
 
 ## Boot sequence
 
-After a Home Assistant restart, `input_select.heating_mode` retains its last value, so `heating_apply_mode` will not fire automatically. Add a boot automation to trigger it after startup:
+After a Home Assistant restart, the system needs to restore the correct state. Both blueprints handle their own part automatically:
+
+- **`hydronic_heating_schedule`** — fires at t+1 min, sets `input_select.heating_mode` to the correct time-based period (Morning/Day/Evening/Night)
+- **`hydronic_presence_controller`** — fires at t+3 min, re-evaluates presence state and overrides to Away/Holiday if nobody is home
+
+You still need a boot automation to run `heating_apply_mode` (which translates the mode into room temperatures) and to explicitly trigger your TRV controllers once — because if the temperature values didn't change since before the restart, the TRV controller's state trigger won't fire automatically.
 
 ```yaml
 - id: heating_boot_sequence
   alias: HVAC - Heating - Boot Sequence
   trigger:
-    - platform: homeassistant
-      event: start
+    - trigger: event
+      event_type: homeassistant_started
   action:
     - delay:
         minutes: 2
+    # heating_schedule has already set the correct mode at t+1 min
     - service: automation.trigger
       target:
         entity_id: automation.hvac_heating_apply_mode
       data:
         skip_condition: false
+    - delay:
+        minutes: 1
+    # Force TRV controllers to run once and set valve positions
+    - service: automation.trigger
+      data:
+        skip_condition: true
+      target:
+        entity_id:
+          - automation.shelly_trv_bedroom_controller_v2_0
+          - automation.shelly_trv_kitchen_controller_v2_0
+          # ... add all your TRV controller automation entity IDs
 ```
 
-The 2-minute delay allows all entities and integrations to become available before applying temperatures.
+**Boot timeline:**
+```
+t+1:00  heating_schedule     → sets correct time mode (Morning/Day/Evening/Night)
+t+2:00  boot automation      → apply_mode (applies room temperatures)
+t+3:00  boot automation      → TRV controllers (sets valve positions)
+t+3:00  presence_controller  → overrides to Away/Holiday if nobody is home
+```
 
 ---
 
