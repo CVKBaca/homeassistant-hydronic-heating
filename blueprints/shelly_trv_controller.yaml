@@ -148,10 +148,12 @@ variables:
   # Uses target_temp_input directly — does not depend on trv_entity.temperature
   # so it is correct immediately after target_t is published, without waiting
   # for the TRV to echo the new target back via MQTT.
+  # External sensor unavailable → valve closed (fail-safe against overheating).
   desired_position: >
     {% set delta = states(target_temp_input) | float(0) - states(aqara_sensor) | float(25) %}
     {% if states(window_sensor) == 'on' %}0
     {% elif states(heating_status_sensor) != 'On' %}0
+    {% elif not states(aqara_sensor) | is_number %}0
     {% elif delta <= -0.10 %}0
     {% elif delta <= -0.05 %}13
     {% elif delta <= 0.00 %}18
@@ -187,6 +189,9 @@ triggers:
     to: 'off'
     for:
       minutes: !input window_close_delay
+  # Heating status change — react immediately when heating season starts/stops
+  - trigger: state
+    entity_id: !input heating_status_sensor
   # Safety net — re-evaluates all three blocks every 15 minutes
   - trigger: time_pattern
     minutes: /15
@@ -228,7 +233,8 @@ actions:
     - condition: template
       value_template: >
         {{ states(heating_status_sensor) == 'On'
-           and states(current_valve_entity) | int(0) > 0 }}
+           and states(current_valve_entity) | int(0) > 0
+           and states(aqara_sensor) | is_number }}
     then:
       # If aqara just changed and the TRV sensor hasn't settled yet, wait.
       # This prevents sending a temperature that the TRV will immediately
